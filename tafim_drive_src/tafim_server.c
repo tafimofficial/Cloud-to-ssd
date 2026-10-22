@@ -86,11 +86,15 @@ static const char* HTML_TERABOX_LOGIN =
 "    </div>"
 "    <a href='https://www.terabox.app/main' target='_blank' class='btn-secondary'>1. Open TeraBox Login in New Tab</a>"
 "    <div class='divider'><span>2. CONNECT STORAGE</span></div>"
-"    <input type='text' id='accountName' placeholder='Account Nickname (e.g. My Personal TeraBox)' value='Tafim TeraBox Drive'>"
-"    <input type='text' id='sessionToken' placeholder='Paste TeraBox ndus cookie or WebDAV URL (optional)'>"
+"    <div style='text-align: left; font-size: 12px; color: #94a3b8; margin-bottom: 6px;'>Account Display Name:</div>"
+"    <input type='text' id='accountName' placeholder='Account Nickname'>"
+"    <div style='text-align: left; font-size: 12px; color: #94a3b8; margin-bottom: 6px;'>Dedicated Cloud Subfolder (Isolated - Files Will Not Mix):</div>"
+"    <input type='text' id='subFolder' placeholder='e.g. Drive_F (leave blank for root)'>"
+"    <div style='text-align: left; font-size: 12px; color: #94a3b8; margin-bottom: 6px;'>Custom WebDAV URL / ndus cookie (optional):</div>"
+"    <input type='text' id='sessionToken' placeholder='Optional custom token or URL'>"
 "    <button type='button' class='btn-primary' onclick='submitConnect()'>Connect & Mount Drive Now</button>"
 "    <div class='note'>"
-"      <b>Tip:</b> If you are already logged in to TeraBox on your browser or using a WebDAV bridge, simply click <b>Connect & Mount Drive Now</b>. Tafim Drive will link the storage and mount the drive letter immediately in Windows."
+"      <b>Storage Isolation:</b> Each drive gets its own folder so files never mix, overlap, or duplicate between different drives!"
 "    </div>"
 "  </div>"
 "  <div id='successBox' class='success-box'>"
@@ -104,13 +108,18 @@ static const char* HTML_TERABOX_LOGIN =
 "  const urlParams = new URLSearchParams(window.location.search);"
 "  const drive = urlParams.get('drive') || 'T';"
 "  document.getElementById('targetDriveLetter').textContent = drive + ':';"
+"  document.getElementById('accountName').value = 'Tafim TeraBox (' + drive + ':)';"
+"  if (drive !== 'E' && drive !== 'T') {"
+"    document.getElementById('subFolder').value = 'Drive_' + drive;"
+"  }"
 "  function submitConnect() {"
-"    const name = document.getElementById('accountName').value.trim() || 'TeraBox Drive';"
+"    const name = document.getElementById('accountName').value.trim() || ('TeraBox (' + drive + ':)');"
 "    const token = document.getElementById('sessionToken').value.trim();"
+"    const folder = document.getElementById('subFolder').value.trim();"
 "    fetch('/api/connect/terabox', {"
 "      method: 'POST',"
 "      headers: { 'Content-Type': 'application/json' },"
-"      body: JSON.stringify({ drive: drive, name: name, token: token })"
+"      body: JSON.stringify({ drive: drive, name: name, token: token, folder: folder })"
 "    }).then(r => r.json()).then(data => {"
 "      document.getElementById('formContainer').style.display = 'none';"
 "      document.getElementById('successBox').style.display = 'block';"
@@ -251,6 +260,18 @@ static void register_and_mount_cloud_account(CloudProviderType provider, const c
         acc->engine = MOUNT_ENGINE_RCLONE_WINFSP;
         acc->auto_mount = true;
 
+        /* Isolate storage if same remote is already mapped to another drive */
+        bool duplicate_remote = false;
+        for (int a = 0; a < g_cfg->account_count; a++) {
+            if (a != idx && _stricmp(g_cfg->accounts[a].remote_name, acc->remote_name) == 0 && !g_cfg->accounts[a].remote_path[0]) {
+                duplicate_remote = true;
+                break;
+            }
+        }
+        if (duplicate_remote && !acc->remote_path[0]) {
+            snprintf(acc->remote_path, sizeof(acc->remote_path), "Drive_%c", drive_letter);
+        }
+
         config_save(g_cfg);
         mount_account(g_cfg, idx);
 
@@ -363,6 +384,7 @@ static void handle_client(SOCKET client_sock) {
         char drive_letter = 'T';
         char name[TAFIM_STR_LEN] = "TeraBox Drive";
         char token[TAFIM_LONG_STR_LEN] = {0};
+        char folder[TAFIM_STR_LEN] = {0};
 
         if (body_start) {
             body_start += 4;
@@ -395,6 +417,18 @@ static void handle_client(SOCKET client_sock) {
                     }
                 }
             }
+            const char* fld = strstr(body_start, "\"folder\":");
+            if (fld) {
+                const char* q1 = strchr(fld + 9, '\"');
+                if (q1) {
+                    const char* q2 = strchr(q1 + 1, '\"');
+                    if (q2 && (size_t)(q2 - q1 - 1) < sizeof(folder)) {
+                        size_t len = q2 - q1 - 1;
+                        memcpy(folder, q1 + 1, len);
+                        folder[len] = '\0';
+                    }
+                }
+            }
         }
 
         if (g_cfg) {
@@ -415,6 +449,20 @@ static void handle_client(SOCKET client_sock) {
                 acc->engine = MOUNT_ENGINE_RCLONE_WINFSP;
                 acc->auto_mount = true;
                 strcpy_s(acc->remote_name, sizeof(acc->remote_name), "terabox-chunked");
+
+                /* If an existing account already uses terabox-chunked, isolate files into a separate folder */
+                bool same_remote_exists = false;
+                for (int a = 0; a < g_cfg->account_count; a++) {
+                    if (a != idx && _stricmp(g_cfg->accounts[a].remote_name, "terabox-chunked") == 0 && !g_cfg->accounts[a].remote_path[0]) {
+                        same_remote_exists = true;
+                        break;
+                    }
+                }
+                if (folder[0]) {
+                    strcpy_s(acc->remote_path, sizeof(acc->remote_path), folder);
+                } else if (same_remote_exists && !acc->remote_path[0]) {
+                    snprintf(acc->remote_path, sizeof(acc->remote_path), "Drive_%c", drive_letter);
+                }
 
                 if (token[0]) {
                     if (strncmp(token, "http://", 7) == 0 || strncmp(token, "https://", 8) == 0) {

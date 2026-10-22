@@ -72,29 +72,41 @@ static bool is_process_running(HANDLE hProc, DWORD pid) {
     return alive;
 }
 
+static bool is_valid_cpx_dir(const char* dir) {
+    if (!dir || !*dir) return false;
+    char cpx[MAX_PATH], hp[MAX_PATH];
+    snprintf(cpx, sizeof(cpx), "%s\\cpx.exe", dir);
+    snprintf(hp, sizeof(hp), "%s\\hostpolicy.dll", dir);
+    return file_exists(cpx) && file_exists(hp);
+}
+
 static void find_cpx_exe(char* out_path, size_t max_len) {
     char app_dir[MAX_PATH];
     get_app_dir(app_dir, sizeof(app_dir));
 
-    char p1[MAX_PATH];
-    snprintf(p1, sizeof(p1), "%s\\cpx.exe", app_dir);
-    if (file_exists(p1)) { strncpy_s(out_path, max_len, p1, _TRUNCATE); return; }
-
-    char p2[MAX_PATH];
-    snprintf(p2, sizeof(p2), "%s\\tools\\cpx.exe", app_dir);
-    if (file_exists(p2)) { strncpy_s(out_path, max_len, p2, _TRUNCATE); return; }
+    if (is_valid_cpx_dir(app_dir)) {
+        snprintf(out_path, max_len, "%s\\cpx.exe", app_dir);
+        return;
+    }
 
     char local_appdata[MAX_PATH];
     if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, local_appdata))) {
-        char p3[MAX_PATH];
-        snprintf(p3, sizeof(p3), "%s\\Programs\\Tafim Drive\\cpx.exe", local_appdata);
-        if (file_exists(p3)) { strncpy_s(out_path, max_len, p3, _TRUNCATE); return; }
-        snprintf(p3, sizeof(p3), "%s\\Programs\\CloudPlayX\\cpx.exe", local_appdata);
-        if (file_exists(p3)) { strncpy_s(out_path, max_len, p3, _TRUNCATE); return; }
+        char p1[MAX_PATH];
+        snprintf(p1, sizeof(p1), "%s\\Programs\\CloudPlayX", local_appdata);
+        if (is_valid_cpx_dir(p1)) {
+            snprintf(out_path, max_len, "%s\\cpx.exe", p1);
+            return;
+        }
+        char p2[MAX_PATH];
+        snprintf(p2, sizeof(p2), "%s\\Programs\\Tafim Drive", local_appdata);
+        if (is_valid_cpx_dir(p2)) {
+            snprintf(out_path, max_len, "%s\\cpx.exe", p2);
+            return;
+        }
     }
 
-    if (file_exists("cpx.exe")) { GetFullPathNameA("cpx.exe", (DWORD)max_len, out_path, NULL); return; }
-    if (file_exists("tools\\cpx.exe")) { GetFullPathNameA("tools\\cpx.exe", (DWORD)max_len, out_path, NULL); return; }
+    if (is_valid_cpx_dir(".")) { GetFullPathNameA("cpx.exe", (DWORD)max_len, out_path, NULL); return; }
+    if (is_valid_cpx_dir("tools\\cpx")) { GetFullPathNameA("tools\\cpx\\cpx.exe", (DWORD)max_len, out_path, NULL); return; }
 
     out_path[0] = '\0';
 }
@@ -128,15 +140,18 @@ static void ensure_terabox_bridge(void) {
     find_cpx_exe(cpx_exe, sizeof(cpx_exe));
     if (!cpx_exe[0]) return;
 
-    /* Check home directory: prefer TafimDrive, fallback to CloudPlayX */
+    /* Check home directory: CloudPlayX contains active credentials (terabox.websession.key & cloudplayx.db) */
     char local_appdata[MAX_PATH];
     char home_dir[MAX_PATH];
     if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, local_appdata))) {
-        snprintf(home_dir, sizeof(home_dir), "%s\\TafimDrive", local_appdata);
+        char testHome[MAX_PATH];
+        snprintf(testHome, sizeof(testHome), "%s\\CloudPlayX", local_appdata);
         char testKey[MAX_PATH];
-        snprintf(testKey, sizeof(testKey), "%s\\terabox.bridge.key", home_dir);
-        if (!file_exists(testKey)) {
-            snprintf(home_dir, sizeof(home_dir), "%s\\CloudPlayX", local_appdata);
+        snprintf(testKey, sizeof(testKey), "%s\\terabox.websession.key", testHome);
+        if (file_exists(testKey)) {
+            strcpy_s(home_dir, sizeof(home_dir), testHome);
+        } else {
+            snprintf(home_dir, sizeof(home_dir), "%s\\TafimDrive", local_appdata);
         }
     } else {
         strcpy_s(home_dir, sizeof(home_dir), ".");
@@ -300,27 +315,41 @@ bool mount_account(AppConfig* cfg, int account_index) {
     CreateDirectoryA(cfg->cache_dir, NULL);
     CreateDirectoryA(mount_cache, NULL);
 
-    /* Determine remote target */
-    char remote_target[TAFIM_STR_LEN * 2];
+    /* Determine base remote name */
+    char base_remote[TAFIM_STR_LEN];
     if (acc->provider == PROVIDER_TERABOX) {
         if (acc->remote_name[0] && strcmp(acc->remote_name, "terabox_main") != 0 && strcmp(acc->remote_name, "terabox_second") != 0) {
-            snprintf(remote_target, sizeof(remote_target), "%s:", acc->remote_name);
+            strncpy_s(base_remote, sizeof(base_remote), acc->remote_name, _TRUNCATE);
         } else {
-            /* Default to the proven terabox-chunked: backend with 1024 GB volume capacity */
-            strcpy_s(remote_target, sizeof(remote_target), "terabox-chunked:");
+            strcpy_s(base_remote, sizeof(base_remote), "terabox-chunked");
         }
     } else if (acc->provider == PROVIDER_GDRIVE) {
-        snprintf(remote_target, sizeof(remote_target), "%s:", acc->remote_name[0] ? acc->remote_name : "gdrive");
+        strncpy_s(base_remote, sizeof(base_remote), acc->remote_name[0] ? acc->remote_name : "gdrive", _TRUNCATE);
     } else if (acc->provider == PROVIDER_ONEDRIVE) {
-        snprintf(remote_target, sizeof(remote_target), "%s:", acc->remote_name[0] ? acc->remote_name : "onedrive");
+        strncpy_s(base_remote, sizeof(base_remote), acc->remote_name[0] ? acc->remote_name : "onedrive", _TRUNCATE);
     } else if (acc->provider == PROVIDER_DROPBOX) {
-        snprintf(remote_target, sizeof(remote_target), "%s:", acc->remote_name[0] ? acc->remote_name : "dropbox");
+        strncpy_s(base_remote, sizeof(base_remote), acc->remote_name[0] ? acc->remote_name : "dropbox", _TRUNCATE);
     } else if (acc->provider == PROVIDER_MEGA) {
-        snprintf(remote_target, sizeof(remote_target), "%s:", acc->remote_name[0] ? acc->remote_name : "mega");
+        strncpy_s(base_remote, sizeof(base_remote), acc->remote_name[0] ? acc->remote_name : "mega", _TRUNCATE);
     } else if (acc->provider == PROVIDER_WEBDAV) {
-        snprintf(remote_target, sizeof(remote_target), "%s:", acc->remote_name[0] ? acc->remote_name : "webdav");
+        strncpy_s(base_remote, sizeof(base_remote), acc->remote_name[0] ? acc->remote_name : "webdav", _TRUNCATE);
     } else {
-        snprintf(remote_target, sizeof(remote_target), "%s:", acc->remote_name[0] ? acc->remote_name : "remote");
+        strncpy_s(base_remote, sizeof(base_remote), acc->remote_name[0] ? acc->remote_name : "remote", _TRUNCATE);
+    }
+
+    size_t br_len = strlen(base_remote);
+    if (br_len > 0 && base_remote[br_len - 1] == ':') {
+        base_remote[br_len - 1] = '\0';
+    }
+
+    /* Determine remote target with isolated subfolder support */
+    char remote_target[TAFIM_STR_LEN * 2];
+    if (acc->remote_path[0]) {
+        const char* sub = acc->remote_path;
+        while (*sub == '/' || *sub == '\\') sub++;
+        snprintf(remote_target, sizeof(remote_target), "%s:%s", base_remote, sub);
+    } else {
+        snprintf(remote_target, sizeof(remote_target), "%s:", base_remote);
     }
 
     /* Format clean Volume Label for Windows Explorer */

@@ -374,6 +374,18 @@ bool config_load(AppConfig* cfg) {
 
     free(content);
 
+    /* Ensure duplicate drives on the same cloud backend have their own isolated folder so files never mix */
+    for (int i = 0; i < cfg->account_count; i++) {
+        for (int j = i + 1; j < cfg->account_count; j++) {
+            if (cfg->accounts[i].remote_name[0] &&
+                _stricmp(cfg->accounts[i].remote_name, cfg->accounts[j].remote_name) == 0) {
+                if (!cfg->accounts[i].remote_path[0] && !cfg->accounts[j].remote_path[0]) {
+                    snprintf(cfg->accounts[j].remote_path, sizeof(cfg->accounts[j].remote_path), "Drive_%c", cfg->accounts[j].drive_letter);
+                }
+            }
+        }
+    }
+
     if (cfg->account_count == 0) {
         config_init_defaults(cfg);
         config_save(cfg);
