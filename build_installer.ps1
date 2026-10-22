@@ -31,16 +31,29 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to compile Uninstall.exe"
 }
 
-# 2. Refresh payload bundle
-Write-Host "Preparing bundle files..."
-Copy-Item "Tafim Drive.exe" "installer_bundle\Tafim Drive.exe" -Force
-Copy-Item "tools\rclone\rclone.exe" "installer_bundle\rclone.exe" -Force
-Copy-Item "rclone.conf" "installer_bundle\rclone.conf" -Force
-Copy-Item "tafim_drive.ico" "installer_bundle\tafim_drive.ico" -Force
-Copy-Item "tafim_drives.json" "installer_bundle\tafim_drives.json" -Force
+# 2. Refresh payload bundle on fast local drive
+Write-Host "Preparing bundle files on local storage..."
+$b = "$env:TEMP\tb_$([System.IO.Path]::GetRandomFileName())"
+New-Item -ItemType Directory -Path $b -Force | Out-Null
+Copy-Item "Tafim Drive.exe" "$b\Tafim Drive.exe" -Force
+if (Test-Path "C:\Users\T\AppData\Local\Programs\Tafim Drive\rclone.exe") {
+    Copy-Item "C:\Users\T\AppData\Local\Programs\Tafim Drive\rclone.exe" "$b\rclone.exe" -Force
+} else {
+    Copy-Item "tools\rclone\rclone.exe" "$b\rclone.exe" -Force
+}
+if (Test-Path "C:\Users\T\AppData\Local\Programs\CloudPlayX\cpx.exe") {
+    Copy-Item "C:\Users\T\AppData\Local\Programs\CloudPlayX\cpx.exe" "$b\cpx.exe" -Force
+} elseif (Test-Path "tools\cpx.exe") {
+    Copy-Item "tools\cpx.exe" "$b\cpx.exe" -Force
+}
+Copy-Item "rclone.conf" "$b\rclone.conf" -Force
+Copy-Item "tafim_drive.ico" "$b\tafim_drive.ico" -Force
+Copy-Item "tafim_drives.json" "$b\tafim_drives.json" -Force
+Copy-Item "installer_bundle\Uninstall.exe" "$b\Uninstall.exe" -Force
 
 Write-Host "Compressing payload.zip..."
-Compress-Archive -Path "t:\Cloud-SSD\installer_bundle\*" -DestinationPath "t:\Cloud-SSD\payload.zip" -Force
+tar.exe -a -cf "$env:TEMP\payload.zip" -C $b *
+Copy-Item "$env:TEMP\payload.zip" "t:\Cloud-SSD\payload.zip" -Force
 
 # 3. Compile installer resource
 Write-Host "Compiling installer resource (icon + embedded payload.zip)..."

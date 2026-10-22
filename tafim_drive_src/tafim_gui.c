@@ -692,8 +692,12 @@ int gui_run(AppConfig* cfg, HINSTANCE hInstance, int nCmdShow) {
     BOOL useDarkMode = TRUE;
     DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDarkMode, sizeof(useDarkMode));
 
-    ShowWindow(hWnd, nCmdShow ? nCmdShow : SW_SHOWNORMAL);
-    UpdateWindow(hWnd);
+    if (nCmdShow == SW_HIDE) {
+        ShowWindow(hWnd, SW_HIDE);
+    } else {
+        ShowWindow(hWnd, nCmdShow ? nCmdShow : SW_SHOWNORMAL);
+        UpdateWindow(hWnd);
+    }
 
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0)) {

@@ -189,6 +189,7 @@ static DWORD WINAPI install_thread_proc(LPVOID lpParam) {
         HKEY hRunKey;
         if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
                           0, KEY_SET_VALUE, &hRunKey) == ERROR_SUCCESS) {
+            RegDeleteValueW(hRunKey, L"Tafim");
             WCHAR szRunVal[MAX_PATH * 2];
             swprintf_s(szRunVal, sizeof(szRunVal)/sizeof(szRunVal[0]), L"\"%s\" --boot", szTargetExe);
             RegSetValueExW(hRunKey, L"TafimDrive", 0, REG_SZ, (const BYTE*)szRunVal,

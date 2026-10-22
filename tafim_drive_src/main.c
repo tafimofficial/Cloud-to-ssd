@@ -18,12 +18,31 @@ static void print_help(void) {
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
     (void)hPrevInstance;
+
+    /* Always ensure Current Working Directory is the directory containing Tafim Drive.exe */
+    WCHAR szExePath[MAX_PATH];
+    if (GetModuleFileNameW(NULL, szExePath, MAX_PATH)) {
+        WCHAR* pLastSlash = wcsrchr(szExePath, L'\\');
+        if (pLastSlash) {
+            *pLastSlash = L'\0';
+            SetCurrentDirectoryW(szExePath);
+        }
+    }
+
     AppConfig cfg;
     config_load(&cfg);
     mount_update_all_states(&cfg);
 
+    PWSTR fullCmd = GetCommandLineW();
+    const wchar_t* pArgs = (pCmdLine && *pCmdLine) ? pCmdLine : fullCmd;
+
+    if (wcsstr(fullCmd, L"--boot") || wcsstr(fullCmd, L"--startup") || wcsstr(fullCmd, L"--silent")) {
+        mount_all_auto(&cfg);
+        return gui_run(&cfg, hInstance, SW_HIDE);
+    }
+
     /* If CLI arguments were provided, attach to caller's console */
-    if (pCmdLine && *pCmdLine) {
+    if (wcsstr(pArgs, L"--") || wcsstr(pArgs, L"/?")) {
         bool hasConsole = false;
         if (AttachConsole(ATTACH_PARENT_PROCESS)) {
             hasConsole = true;
@@ -33,39 +52,39 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
             freopen_s(&fp, "CONIN$", "r", stdin);
         }
 
-        if (wcsstr(pCmdLine, L"--help") || wcsstr(pCmdLine, L"-h") || wcsstr(pCmdLine, L"/?")) {
+        if (wcsstr(pArgs, L"--help") || wcsstr(pArgs, L"-h") || wcsstr(pArgs, L"/?")) {
             print_help();
             return 0;
         }
 
-        if (wcsstr(pCmdLine, L"--status")) {
+        if (wcsstr(pArgs, L"--status")) {
             ui_show_banner();
             ui_show_status_table(&cfg);
             return 0;
         }
 
-        if (wcsstr(pCmdLine, L"--cli")) {
+        if (wcsstr(pArgs, L"--cli")) {
             if (!hasConsole) AllocConsole();
             ui_menu_loop(&cfg);
             return 0;
         }
 
-        if (wcsstr(pCmdLine, L"--mount-all")) {
+        if (wcsstr(pArgs, L"--mount-all")) {
             printf("Mounting all configured drives...\n");
             int n = mount_all_auto(&cfg);
             printf("Mounted %d drives.\n", n);
             return 0;
         }
 
-        if (wcsstr(pCmdLine, L"--unmount-all")) {
+        if (wcsstr(pArgs, L"--unmount-all")) {
             printf("Unmounting all drives...\n");
             int n = unmount_all(&cfg);
             printf("Unmounted %d drives.\n", n);
             return 0;
         }
 
-        const wchar_t* pMount = wcsstr(pCmdLine, L"--mount");
-        if (pMount && !wcsstr(pCmdLine, L"--mount-all")) {
+        const wchar_t* pMount = wcsstr(pArgs, L"--mount");
+        if (pMount && !wcsstr(pArgs, L"--mount-all")) {
             pMount += 7;
             while (*pMount == L' ') pMount++;
             if (*pMount) {
@@ -84,8 +103,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
             }
         }
 
-        const wchar_t* pUnmount = wcsstr(pCmdLine, L"--unmount");
-        if (pUnmount && !wcsstr(pCmdLine, L"--unmount-all")) {
+        const wchar_t* pUnmount = wcsstr(pArgs, L"--unmount");
+        if (pUnmount && !wcsstr(pArgs, L"--unmount-all")) {
             pUnmount += 9;
             while (*pUnmount == L' ') pUnmount++;
             if (*pUnmount) {
@@ -99,17 +118,25 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
             }
         }
 
-        if (wcsstr(pCmdLine, L"--test-terabox")) {
+        if (wcsstr(pArgs, L"--test-terabox")) {
             ui_wizard_test_terabox(&cfg);
             return 0;
         }
-
-        if (wcsstr(pCmdLine, L"--boot") || wcsstr(pCmdLine, L"--startup") || wcsstr(pCmdLine, L"--silent")) {
-            mount_all_auto(&cfg);
-            return gui_run(&cfg, hInstance, SW_HIDE);
-        }
     }
 
-    /* By default (e.g. double-click), launch the GUI with NO background terminal! */
-    return gui_run(&cfg, hInstance, nCmdShow);
+    /* Single instance guard for GUI: bring existing window to front */
+    HANDLE hSingleMutex = CreateMutexW(NULL, FALSE, L"Local\\TafimDrive_SingleInstance_Mutex_v1");
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        HWND hExisting = FindWindowW(L"TafimDriveWindowClass", NULL);
+        if (hExisting) {
+            ShowWindow(hExisting, SW_RESTORE);
+            SetForegroundWindow(hExisting);
+        }
+        if (hSingleMutex) CloseHandle(hSingleMutex);
+        return 0;
+    }
+
+    int res = gui_run(&cfg, hInstance, nCmdShow);
+    if (hSingleMutex) CloseHandle(hSingleMutex);
+    return res;
 }

@@ -2,7 +2,10 @@
 #define TAFIM_DRIVE_H
 
 #define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
+#pragma comment(lib, "ws2_32.lib")
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

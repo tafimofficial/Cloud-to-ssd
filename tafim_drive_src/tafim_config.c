@@ -69,10 +69,9 @@ void config_init_defaults(AppConfig* cfg) {
     cfg->auto_mount_on_startup = true;
 
     const char* potential_rclone[] = {
-        "tools\\rclone\\rclone.exe",
-        "t:\\Cloud-SSD\\tools\\rclone\\rclone.exe",
         "rclone.exe",
-        "C:\\Users\\T\\AppData\\Local\\Programs\\CloudPlayX\\tools\\rclone\\rclone.exe"
+        "tools\\rclone\\rclone.exe",
+        "tools\\rclone.exe"
     };
 
     cfg->rclone_path[0] = '\0';
@@ -216,6 +215,7 @@ static char* extract_json_string(const char* json, const char* key, char* out, s
     if (!p) return NULL;
     p = strchr(p + strlen(pattern), ':');
     if (!p) return NULL;
+    p++; /* Skip colon */
     while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
     if (*p != '\"') return NULL;
     p++;
@@ -241,6 +241,7 @@ static bool extract_json_bool(const char* json, const char* key, bool default_va
     if (!p) return default_val;
     p = strchr(p + strlen(pattern), ':');
     if (!p) return default_val;
+    p++; /* Skip colon */
     while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
     if (_strnicmp(p, "true", 4) == 0) return true;
     if (_strnicmp(p, "false", 5) == 0) return false;
@@ -254,6 +255,7 @@ static double extract_json_double(const char* json, const char* key, double defa
     if (!p) return default_val;
     p = strchr(p + strlen(pattern), ':');
     if (!p) return default_val;
+    p++; /* Skip colon */
     while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
     return atof(p);
 }
@@ -265,6 +267,7 @@ static int extract_json_int(const char* json, const char* key, int default_val) 
     if (!p) return default_val;
     p = strchr(p + strlen(pattern), ':');
     if (!p) return default_val;
+    p++; /* Skip colon */
     while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
     int val = atoi(p);
     return val > 0 ? val : default_val;
@@ -309,7 +312,7 @@ bool config_load(AppConfig* cfg) {
     cfg->auto_mount_on_startup = extract_json_bool(content, "auto_mount_on_startup", true);
 
     if (!cfg->rclone_path[0]) {
-        config_init_defaults(cfg);
+        strcpy_s(cfg->rclone_path, sizeof(cfg->rclone_path), "rclone.exe");
     }
 
     /* Parse accounts block */
