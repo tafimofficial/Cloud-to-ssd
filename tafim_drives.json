@@ -1,0 +1,60 @@
+{
+  "version": "1.0.0",
+  "rclone_path": "tools\\rclone\\rclone.exe",
+  "cache_dir": "C:\\Users\\T\\AppData\\Local\\TafimDrive\\Cache",
+  "cache_max_gb": 50,
+  "auto_mount_on_startup": true,
+  "accounts": [
+    {
+      "id": "terabox_1",
+      "name": "Tafim Main TeraBox (1024 GB)",
+      "provider": "TeraBox",
+      "drive_letter": "T",
+      "remote_name": "terabox_main",
+      "remote_path": "",
+      "endpoint": "http://127.0.0.1:5244/dav",
+      "auth_token": "",
+      "username": "",
+      "password": "",
+      "auto_mount": false,
+      "read_only": false,
+      "engine": 0,
+      "quota_total_gb": 1024.00,
+      "quota_used_gb": 0.00
+    },
+    {
+      "id": "terabox_2",
+      "name": "Tafim Second TeraBox (1024 GB)",
+      "provider": "TeraBox",
+      "drive_letter": "U",
+      "remote_name": "terabox_second",
+      "remote_path": "",
+      "endpoint": "http://127.0.0.1:5245/dav",
+      "auth_token": "",
+      "username": "",
+      "password": "",
+      "auto_mount": false,
+      "read_only": false,
+      "engine": 0,
+      "quota_total_gb": 1024.00,
+      "quota_used_gb": 0.00
+    },
+    {
+      "id": "gdrive_1",
+      "name": "Google Drive Storage",
+      "provider": "Google Drive",
+      "drive_letter": "G",
+      "remote_name": "gdrive",
+      "remote_path": "",
+      "endpoint": "",
+      "auth_token": "",
+      "username": "",
+      "password": "",
+      "auto_mount": false,
+      "read_only": false,
+      "engine": 0,
+      "quota_total_gb": 2000.00,
+      "quota_used_gb": 0.00
+    }
+  ]
+}
